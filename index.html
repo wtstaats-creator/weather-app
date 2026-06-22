@@ -1,0 +1,1449 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Weather Dashboard</title>
+
+<!-- iOS "Add to Home Screen" support -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Weather Dashboard">
+<meta name="theme-color" content="#15161A">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #15161A;
+    --surface:  #1C1E23;
+    --surface2: #26282E;
+    --border:   #34363D;
+    --accent:   #F2B705;
+    --accent2:  #FFD23F;
+    --solar:    #F2B705;
+    --text:     #F5F4F0;
+    --muted:    #8B8D95;
+    --mono:     'JetBrains Mono', monospace;
+  }
+
+  html, body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0;
+    overflow-x: hidden;
+    width: 100%;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    gap: 10px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    white-space: nowrap;
+  }
+  .logo-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    flex-shrink: 0;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .coord-display {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    background: rgba(242,183,5,.08);
+    border: 1px solid rgba(242,183,5,.25);
+    border-radius: 6px;
+    padding: 6px 12px;
+    letter-spacing: .03em;
+    transition: all .3s;
+    white-space: nowrap;
+  }
+
+  /* ── Language switcher ── */
+  .lang-switch {
+    display: flex;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .lang-btn {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 7px 10px;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .lang-btn:hover { color: var(--text); }
+  .lang-btn.active { background: var(--accent); color: var(--bg); font-weight: 700; }
+
+  /* ── Main layout ── */
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 0;
+    min-height: calc(100vh - 57px);
+    width: 100%;
+  }
+
+  /* ── Left panel ── */
+  .left-panel {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    min-width: 0;
+  }
+
+  .panel-section {
+    padding: 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  /* ── Location controls ── */
+  .loc-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .loc-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    min-width: 0;
+  }
+  .loc-btn:hover { border-color: var(--accent); background: rgba(242,183,5,.06); }
+  .loc-btn:active { transform: scale(.98); }
+  .loc-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+  .loc-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .search-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .search-input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 16px; /* 16px prevents iOS auto-zoom on focus */
+    outline: none;
+    min-width: 0;
+  }
+  .search-input::placeholder { color: var(--muted); }
+  .search-input:focus { border-color: var(--accent); }
+  .search-btn {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 7px;
+    padding: 0 16px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .search-btn:hover { opacity: .85; }
+
+  .search-results {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+  }
+  .search-result-item {
+    padding: 8px 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 11.5px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+    word-break: break-word;
+  }
+  .search-result-item:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .search-result-item b { color: var(--text); font-weight: 500; }
+
+  /* ── Map ── */
+  #map {
+    height: 300px;
+    width: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    cursor: crosshair;
+  }
+  .map-hint {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .map-hint::before {
+    content: '';
+    display: block;
+    width: 14px; height: 14px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%238B8D95'%3E%3Cpath d='M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z'/%3E%3C/svg%3E") no-repeat center/contain;
+    flex-shrink: 0;
+  }
+
+  /* ── Variables ── */
+  .var-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .var-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    user-select: none;
+  }
+  .var-item:hover {
+    border-color: var(--accent);
+    background: rgba(242,183,5,.05);
+  }
+  .var-item.active {
+    border-color: var(--accent);
+    background: rgba(242,183,5,.1);
+  }
+  .var-checkbox {
+    width: 16px; height: 16px;
+    border-radius: 4px;
+    border: 2px solid var(--border);
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .2s;
+  }
+  .var-item.active .var-checkbox { background: var(--accent); border-color: var(--accent); }
+  .var-checkbox::after {
+    content: '✓';
+    font-size: 10px;
+    color: var(--bg);
+    display: none;
+    font-weight: 700;
+  }
+  .var-item.active .var-checkbox::after { display: block; }
+  .var-icon {
+    font-size: 18px;
+    width: 24px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .var-info { flex: 1; min-width: 0; }
+  .var-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .var-unit {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  /* ── Day selector ── */
+  .day-selector {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .day-btn {
+    flex: 1;
+    padding: 10px 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--muted);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color .2s, background .2s, color .2s;
+    text-align: center;
+  }
+  .day-btn:hover { border-color: var(--accent); color: var(--text); }
+  .day-btn.active { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+
+  /* ── Chart legend ── */
+  .chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .legend-line {
+    width: 18px; height: 2px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* ── Transmission factor input ── */
+  .tf-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 10px;
+  }
+  .tf-label { font-size: 12px; color: var(--text); }
+  .tf-label small { display: block; color: var(--muted); font-size: 10px; margin-top: 2px; }
+  .tf-input {
+    width: 64px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 14px;
+    text-align: center;
+    outline: none;
+  }
+  .tf-input:focus { border-color: var(--accent); }
+
+  /* ── Buttons ── */
+  .fetch-btn, .export-btn {
+    margin: 14px 18px 0;
+    padding: 13px;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    cursor: pointer;
+    transition: opacity .2s, transform .1s;
+    width: calc(100% - 36px);
+  }
+  .fetch-btn {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .fetch-btn:hover:not(:disabled) { opacity: .85; }
+  .fetch-btn:active:not(:disabled) { transform: scale(.98); }
+  .fetch-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+  .export-btn {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .export-btn:hover:not(:disabled) { background: rgba(242,183,5,.1); }
+  .export-btn:disabled { opacity: .3; cursor: not-allowed; border-color: var(--border); color: var(--muted); }
+  .export-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+  /* ── Right panel ── */
+  .right-panel {
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-width: 0;
+    width: 100%;
+  }
+
+  /* ── Empty state ── */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--muted);
+    text-align: center;
+    padding: 20px;
+  }
+  .empty-icon { font-size: 44px; opacity: .35; }
+  .empty-state h2 { font-size: 16px; font-weight: 500; color: var(--muted); }
+  .empty-state p  { font-size: 13px; max-width: 280px; line-height: 1.6; }
+
+  /* ── Chart cards ── */
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    width: 100%;
+    min-width: 0;
+  }
+  .chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .chart-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .chart-pill {
+    font-size: 10px;
+    font-family: var(--mono);
+    padding: 3px 8px;
+    border-radius: 20px;
+    background: rgba(242,183,5,.12);
+    color: var(--accent);
+    border: 1px solid rgba(242,183,5,.25);
+    white-space: nowrap;
+  }
+  .chart-wrap { position: relative; height: 200px; width: 100%; }
+
+  /* ── Loader ── */
+  .loader {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(21,22,26,.75);
+    backdrop-filter: blur(4px);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .loader.visible { display: flex; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid rgba(242,183,5,.2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loader-text { font-size: 13px; color: var(--muted); }
+
+  /* ── Toast ── */
+  .toast {
+    display: none;
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    background: #d64545;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    z-index: 9999;
+    max-width: 90vw;
+    text-align: center;
+  }
+  .toast.visible { display: block; }
+  .toast.success { background: #2e9e5b; }
+
+  /* Leaflet dark override */
+  .leaflet-tile { filter: brightness(.65) saturate(.5) contrast(1.05); }
+  .leaflet-container { background: #15161A; }
+  .leaflet-control-zoom a { background: var(--surface2); color: var(--text); border-color: var(--border); }
+  .leaflet-control-zoom a:hover { background: var(--border); }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* ══════════════════════════════════════════════════════
+     RESPONSIVE — tablet & mobile
+     ══════════════════════════════════════════════════════ */
+
+  /* Tablet: narrower sidebar */
+  @media (max-width: 900px) {
+    main { grid-template-columns: 300px 1fr; }
+  }
+
+  /* Mobile: stack vertically, sidebar becomes a collapsible top panel */
+  @media (max-width: 720px) {
+    header { padding: 12px 14px; }
+    .logo { font-size: 13px; }
+    .coord-display { font-size: 11px; padding: 5px 10px; }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      min-height: auto;
+    }
+
+    .left-panel {
+      width: 100%;
+      max-height: none;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Collapsible toggle for the controls panel on mobile */
+    .mobile-panel-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      background: var(--surface);
+      cursor: pointer;
+      user-select: none;
+      border-bottom: 1px solid var(--border);
+    }
+    .mobile-panel-toggle .mpt-label {
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mobile-panel-toggle .chevron {
+      width: 16px; height: 16px;
+      transition: transform .25s;
+      color: var(--muted);
+    }
+    .left-panel.collapsed .chevron { transform: rotate(-90deg); }
+    .left-panel.collapsed .panel-body { display: none; }
+
+    .right-panel { padding: 14px; }
+    .chart-card { padding: 14px; }
+    .chart-wrap { height: 180px; }
+
+    .loc-actions { flex-direction: column; }
+
+    .header-right { gap: 6px; }
+  }
+
+  @media (min-width: 721px) {
+    .mobile-panel-toggle { display: none; }
+  }
+
+  /* Small phones */
+  @media (max-width: 380px) {
+    .lang-btn { padding: 6px 8px; font-size: 10px; }
+    .coord-display { display: none; }
+    .chart-wrap { height: 160px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    <span data-i18n="title">Weather Dashboard · 14 Days</span>
+  </div>
+  <div class="header-right">
+    <div class="coord-display" id="coordDisplay" data-i18n="selectLocation">Select location on the map →</div>
+    <div class="lang-switch">
+      <button class="lang-btn" data-lang="nl" onclick="setLang('nl')">NL</button>
+      <button class="lang-btn active" data-lang="en" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" data-lang="zh" onclick="setLang('zh')">中文</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT PANEL -->
+  <div class="left-panel" id="leftPanel">
+
+    <div class="mobile-panel-toggle" onclick="toggleMobilePanel()">
+      <span class="mpt-label">⚙️ <span data-i18n="settings">Settings</span></span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+
+    <div class="panel-body">
+
+      <div class="panel-section">
+        <div class="panel-label" data-i18n="location">Location</div>
+
+        <div class="loc-actions">
+          <button class="loc-btn" id="gpsBtn" onclick="useCurrentLocation()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+            <span data-i18n="currentLocation">Current location</span>
+          </button>
+        </div>
+
+        <div class="search-row">
+          <input type="text" class="search-input" id="addressInput" data-i18n-placeholder="addressPlaceholder" placeholder="Address or place name…" onkeydown="if(event.key==='Enter')searchAddress()">
+          <button class="search-btn" onclick="searchAddress()" data-i18n="search">Search</button>
+        </div>
+        <div class="search-results" id="searchResults"></div>
+
+        <div id="map"></div>
+        <div class="map-hint" data-i18n="mapHint">Or click directly on the map</div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-label" data-i18n="forecastDays">Forecast period</div>
+        <div class="day-selector">
+          <button class="day-btn" data-days="3" onclick="setDays(3)">3 <span data-i18n="days">days</span></button>
+          <button class="day-btn" data-days="7" onclick="setDays(7)">7 <span data-i18n="days">days</span></button>
+          <button class="day-btn active" data-days="14" onclick="setDays(14)">14 <span data-i18n="days">days</span></button>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-label" data-i18n="variables">Variables</div>
+        <div class="var-grid">
+          <div class="var-item active" data-var="temperature_2m">
+            <div class="var-checkbox"></div>
+            <div class="var-icon">🌡️</div>
+            <div class="var-info">
+              <div class="var-name" data-i18n="varTemp">Temperature</div>
+              <div class="var-unit" data-i18n="varTempUnit">°C · 2 m height</div>
+            </div>
+          </div>
+          <div class="var-item" data-var="relative_humidity_2m">
+            <div class="var-checkbox"></div>
+            <div class="var-icon">💧</div>
+            <div class="var-info">
+              <div class="var-name" data-i18n="varHum">Relative Humidity</div>
+              <div class="var-unit" data-i18n="varHumUnit">% · 2 m height</div>
+            </div>
+          </div>
+          <div class="var-item" data-var="cloud_cover">
+            <div class="var-checkbox"></div>
+            <div class="var-icon">☁️</div>
+            <div class="var-info">
+              <div class="var-name" data-i18n="varCloud">Cloud Cover</div>
+              <div class="var-unit">%</div>
+            </div>
+          </div>
+          <div class="var-item active" data-var="shortwave_radiation">
+            <div class="var-checkbox"></div>
+            <div class="var-icon">☀️</div>
+            <div class="var-info">
+              <div class="var-name">Shortwave Solar Radiation GHI</div>
+              <div class="var-unit">W/m²</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tf-row">
+          <div class="tf-label">
+            <span data-i18n="transmissionFactor">Transmission factor</span>
+            <small data-i18n="transmissionFactorHint">greenhouse cover transmittance</small>
+          </div>
+          <input type="number" class="tf-input" id="transmissionFactor" value="0.6" step="0.01" min="0" max="1">
+        </div>
+      </div>
+
+      <button class="fetch-btn" id="fetchBtn" disabled onclick="fetchData()" data-i18n="chooseLocationFirst">
+        Choose a location first
+      </button>
+      <button class="export-btn" id="exportBtn" disabled onclick="exportToExcel()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span data-i18n="exportExcel">Export to Excel</span>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel" id="rightPanel">
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">🗺️</div>
+      <h2 data-i18n="emptyTitle">No data loaded</h2>
+      <p data-i18n="emptyText">Click on the world map, use your current location, or search for an address. Select variables and press Fetch.</p>
+    </div>
+  </div>
+</main>
+
+<div class="loader" id="loader">
+  <div class="spinner"></div>
+  <div class="loader-text" id="loaderText" data-i18n="fetchingData">Fetching weather data…</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════
+// i18n — translations
+// ════════════════════════════════════════════════════════
+const TRANSLATIONS = {
+  nl: {
+    title: 'Weather Dashboard · 14 dagen',
+    selectLocation: 'Selecteer locatie op de kaart →',
+    settings: 'Instellingen',
+    location: 'Locatie',
+    currentLocation: 'Huidige locatie',
+    gettingLocation: 'Locatie ophalen…',
+    addressPlaceholder: 'Adres of plaatsnaam…',
+    search: 'Zoek',
+    searching: 'Zoeken…',
+    noResults: 'Geen resultaten gevonden.',
+    searchFailed: 'Zoeken mislukt, probeer opnieuw.',
+    mapHint: 'Of klik direct op de kaart',
+    variables: 'Variabelen',
+    varTemp: 'Temperatuur',
+    varTempUnit: '°C · 2 m hoogte',
+    varHum: 'Relatieve Luchtvochtigheid',
+    varHumUnit: '% · 2 m hoogte',
+    varCloud: 'Bewolking',
+    transmissionFactor: 'Transmissiefactor',
+    transmissionFactorHint: 'kasdek-doorlaatfactor',
+    chooseLocationFirst: 'Kies eerst een locatie',
+    fetchButton: 'Ophalen →',
+    exportExcel: 'Exporteer naar Excel',
+    emptyTitle: 'Geen data geladen',
+    emptyText: 'Klik op de wereldkaart, gebruik je huidige locatie, of zoek een adres. Selecteer variabelen en druk op Ophalen.',
+    fetchingData: 'Weerdata ophalen…',
+    selectAtLeastOne: 'Selecteer minimaal één variabele.',
+    chooseLocation: 'Kies eerst een locatie.',
+    fetchFailed: 'Ophalen mislukt: ',
+    locationFound: 'Locatie gevonden.',
+    locationFailed: 'Kon locatie niet ophalen.',
+    locationDenied: 'Locatietoegang geweigerd. Sta dit toe in je browserinstellingen.',
+    geoNotSupported: 'Geolocatie wordt niet ondersteund door je browser.',
+    noDataToExport: 'Geen data om te exporteren.',
+    excelDownloaded: 'Excel-bestand gedownload.',
+    jcm2Label: 'J/cm²/dag (cumulatief, buiten)',
+    molLabel: 'Mol/dag (cumulatief, binnen kas — transmissiefactor',
+    forecastDays: 'Voorspelperiode',
+    days: 'dagen',
+    weatherChartTitle: 'Temperatuur, Luchtvochtigheid & Bewolking',
+    solarChartTitle: 'Zonne-energie',
+  },
+  en: {
+    title: 'Weather Dashboard · 14 Days',
+    selectLocation: 'Select location on the map →',
+    settings: 'Settings',
+    location: 'Location',
+    currentLocation: 'Current location',
+    gettingLocation: 'Getting location…',
+    addressPlaceholder: 'Address or place name…',
+    search: 'Search',
+    searching: 'Searching…',
+    noResults: 'No results found.',
+    searchFailed: 'Search failed, please try again.',
+    mapHint: 'Or click directly on the map',
+    variables: 'Variables',
+    varTemp: 'Temperature',
+    varTempUnit: '°C · 2 m height',
+    varHum: 'Relative Humidity',
+    varHumUnit: '% · 2 m height',
+    varCloud: 'Cloud Cover',
+    transmissionFactor: 'Transmission factor',
+    transmissionFactorHint: 'greenhouse cover transmittance',
+    chooseLocationFirst: 'Choose a location first',
+    fetchButton: 'Fetch →',
+    exportExcel: 'Export to Excel',
+    emptyTitle: 'No data loaded',
+    emptyText: 'Click on the world map, use your current location, or search for an address. Select variables and press Fetch.',
+    fetchingData: 'Fetching weather data…',
+    selectAtLeastOne: 'Select at least one variable.',
+    chooseLocation: 'Choose a location first.',
+    fetchFailed: 'Fetch failed: ',
+    locationFound: 'Location found.',
+    locationFailed: 'Could not get location.',
+    locationDenied: 'Location access denied. Allow it in your browser settings.',
+    geoNotSupported: 'Geolocation is not supported by your browser.',
+    noDataToExport: 'No data to export.',
+    excelDownloaded: 'Excel file downloaded.',
+    jcm2Label: 'J/cm²/day (cumulative, outside)',
+    molLabel: 'Mol/day (cumulative, inside greenhouse — transmission factor',
+    forecastDays: 'Forecast period',
+    days: 'days',
+    weatherChartTitle: 'Temperature, Humidity & Cloud Cover',
+    solarChartTitle: 'Solar Energy',
+  },
+  zh: {
+    title: '天气仪表盘 · 14天',
+    selectLocation: '请在地图上选择位置 →',
+    settings: '设置',
+    location: '位置',
+    currentLocation: '当前位置',
+    gettingLocation: '正在获取位置…',
+    addressPlaceholder: '地址或地名…',
+    search: '搜索',
+    searching: '搜索中…',
+    noResults: '未找到结果。',
+    searchFailed: '搜索失败，请重试。',
+    mapHint: '或直接点击地图',
+    variables: '变量',
+    varTemp: '温度',
+    varTempUnit: '°C · 2 米高度',
+    varHum: '相对湿度',
+    varHumUnit: '% · 2 米高度',
+    varCloud: '云量',
+    transmissionFactor: '透射率',
+    transmissionFactorHint: '温室覆盖透射系数',
+    chooseLocationFirst: '请先选择位置',
+    fetchButton: '获取数据 →',
+    exportExcel: '导出为 Excel',
+    emptyTitle: '尚未加载数据',
+    emptyText: '点击世界地图、使用当前位置或搜索地址。选择变量后点击"获取数据"。',
+    fetchingData: '正在获取天气数据…',
+    selectAtLeastOne: '请至少选择一个变量。',
+    chooseLocation: '请先选择位置。',
+    fetchFailed: '获取失败：',
+    locationFound: '已找到位置。',
+    locationFailed: '无法获取位置。',
+    locationDenied: '位置访问被拒绝。请在浏览器设置中允许访问。',
+    geoNotSupported: '您的浏览器不支持地理定位。',
+    noDataToExport: '没有可导出的数据。',
+    excelDownloaded: 'Excel 文件已下载。',
+    jcm2Label: 'J/cm²/天（累计，室外）',
+    molLabel: '摩尔/天（累计，温室内 — 透射率',
+    forecastDays: '预测周期',
+    days: '天',
+    weatherChartTitle: '温度、湿度与云量',
+    solarChartTitle: '太阳能',
+  }
+};
+
+let currentLang = 'en';
+
+function t(key) {
+  return TRANSLATIONS[currentLang][key] || TRANSLATIONS.en[key] || key;
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  document.documentElement.lang = lang;
+
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+
+  // Update all static elements with data-i18n
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    el.textContent = t(key);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.dataset.i18nPlaceholder;
+    el.placeholder = t(key);
+  });
+
+  // Dynamic states that depend on app state
+  if (lat !== null) {
+    document.getElementById('coordDisplay').textContent = `${lat}° N   ${lon}° E`;
+  }
+  const fetchBtn = document.getElementById('fetchBtn');
+  if (!fetchBtn.disabled) fetchBtn.textContent = t('fetchButton');
+
+  // Re-render charts with translated labels if data is already loaded
+  if (lastData) renderCharts(lastData, lastVars);
+}
+
+// ════════════════════════════════════════════════════════
+// State
+// ════════════════════════════════════════════════════════
+let lat = null, lon = null;
+let marker = null;
+let charts = {};
+let lastData = null;
+let lastVars = [];
+let forecastDays = 14;
+
+function getVarConfig() {
+  return {
+    temperature_2m:       { label: t('varTemp'),  unit: '°C',   color: '#F5F4F0', type: 'line', fill: true  },
+    relative_humidity_2m: { label: t('varHum'),   unit: '%',    color: '#7EC8E3', type: 'line', fill: true  },
+    cloud_cover:           { label: t('varCloud'), unit: '%',    color: '#8B8D95', type: 'bar',  fill: false },
+    shortwave_radiation:   { label: 'Shortwave Solar Radiation GHI', unit: 'W/m²', color: '#F2B705', type: 'bar', fill: false }
+  };
+}
+
+// ── Mobile panel toggle ──
+function toggleMobilePanel() {
+  document.getElementById('leftPanel').classList.toggle('collapsed');
+}
+
+// ── Day selector ──
+function setDays(n) {
+  forecastDays = n;
+  document.querySelectorAll('.day-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.days) === n);
+  });
+}
+
+// ── Map ────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true, attributionControl: false })
+  .setView([30, 10], 1);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 18
+}).addTo(map);
+
+const markerIcon = L.divIcon({
+  html: `<div style="
+    width:14px;height:14px;
+    background:#F2B705;
+    border:2px solid #15161A;
+    border-radius:50%;
+    box-shadow:0 0 0 3px rgba(242,183,5,.45);
+  "></div>`,
+  className: '',
+  iconSize: [14, 14],
+  iconAnchor: [7, 7]
+});
+
+function setLocation(newLat, newLon, zoom) {
+  lat = +newLat.toFixed(4);
+  lon = +newLon.toFixed(4);
+
+  if (marker) marker.remove();
+  marker = L.marker([lat, lon], { icon: markerIcon }).addTo(map);
+  map.setView([lat, lon], zoom || map.getZoom());
+
+  document.getElementById('coordDisplay').textContent = `${lat}° N   ${lon}° E`;
+  document.getElementById('fetchBtn').disabled = false;
+  document.getElementById('fetchBtn').textContent = t('fetchButton');
+
+  // small delay so layout settles before recalculating tile size
+  setTimeout(() => map.invalidateSize(), 200);
+}
+
+map.on('click', e => setLocation(e.latlng.lat, e.latlng.lng));
+
+// recalc map size on resize / orientation change (important for mobile)
+window.addEventListener('resize', () => setTimeout(() => map.invalidateSize(), 150));
+window.addEventListener('orientationchange', () => setTimeout(() => map.invalidateSize(), 300));
+
+// ── Huidige locatie (GPS) ──────────────────────────────
+function useCurrentLocation() {
+  if (!navigator.geolocation) {
+    showToast(t('geoNotSupported'));
+    return;
+  }
+  const btn = document.getElementById('gpsBtn');
+  const gpsIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>`;
+  btn.disabled = true;
+  btn.innerHTML = `${gpsIcon} <span>${t('gettingLocation')}</span>`;
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      setLocation(pos.coords.latitude, pos.coords.longitude, 10);
+      btn.disabled = false;
+      btn.innerHTML = `${gpsIcon} <span>${t('currentLocation')}</span>`;
+      showToast(t('locationFound'), true);
+    },
+    err => {
+      btn.disabled = false;
+      btn.innerHTML = `${gpsIcon} <span>${t('currentLocation')}</span>`;
+      let msg = t('locationFailed');
+      if (err.code === 1) msg = t('locationDenied');
+      showToast(msg);
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
+// ── Adres zoeken (OpenStreetMap Nominatim geocoder) ────
+async function searchAddress() {
+  const q = document.getElementById('addressInput').value.trim();
+  const resultsEl = document.getElementById('searchResults');
+  resultsEl.innerHTML = '';
+  if (!q) return;
+
+  resultsEl.innerHTML = `<div class="search-result-item">${t('searching')}</div>`;
+
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5&addressdetails=1`, {
+      headers: { 'Accept-Language': currentLang }
+    });
+    const results = await res.json();
+
+    if (!results.length) {
+      resultsEl.innerHTML = `<div class="search-result-item">${t('noResults')}</div>`;
+      return;
+    }
+
+    resultsEl.innerHTML = '';
+    results.forEach(r => {
+      const item = document.createElement('div');
+      item.className = 'search-result-item';
+      item.innerHTML = `<b>${r.display_name.split(',')[0]}</b><br>${r.display_name}`;
+      item.onclick = () => {
+        setLocation(parseFloat(r.lat), parseFloat(r.lon), 11);
+        resultsEl.innerHTML = '';
+        document.getElementById('addressInput').value = r.display_name.split(',')[0];
+      };
+      resultsEl.appendChild(item);
+    });
+  } catch (e) {
+    resultsEl.innerHTML = `<div class="search-result-item">${t('searchFailed')}</div>`;
+  }
+}
+
+// ── Variable toggles ───────────────────────────────────
+document.querySelectorAll('.var-item').forEach(el => {
+  el.addEventListener('click', () => el.classList.toggle('active'));
+});
+
+function getSelectedVars() {
+  return [...document.querySelectorAll('.var-item.active')].map(el => el.dataset.var);
+}
+
+// ── Fetch ──────────────────────────────────────────────
+async function fetchData() {
+  const userVars = getSelectedVars();
+  if (userVars.length === 0) { showToast(t('selectAtLeastOne')); return; }
+  if (lat === null) { showToast(t('chooseLocation')); return; }
+
+  const varList = [...userVars];
+
+  showLoader(true, t('fetchingData'));
+
+  const url = `https://api.open-meteo.com/v1/forecast`
+    + `?latitude=${lat}&longitude=${lon}`
+    + `&hourly=${varList.join(',')}`
+    + `&models=best_match&timezone=auto&forecast_days=${forecastDays}`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`API error ${res.status}`);
+    const data = await res.json();
+    lastData = data;
+    lastVars = userVars;
+    renderCharts(data, userVars);
+    document.getElementById('exportBtn').disabled = false;
+  } catch (e) {
+    showToast(t('fetchFailed') + e.message);
+  } finally {
+    showLoader(false);
+  }
+}
+
+// ── Berekeningen (overgenomen uit Forecast_model.xlsx) ─
+// H: J/cm2/day cumulative outside  =  cumsom(shortwave_radiation * 0.36), reset elke dag om 00:00
+// I: Mol/day cumulative inside     =  H * ((0.45*(500/120))/100) * transmissiefactor
+function computeCumulativeColumns(data, transmissionFactor) {
+  const times = data.hourly.time;
+  const shortwave = data.hourly.shortwave_radiation;
+  const H = new Array(times.length).fill(0);
+  const I = new Array(times.length).fill(0);
+
+  let cum = 0;
+  for (let i = 0; i < times.length; i++) {
+    const hour = new Date(times[i]).getHours();
+    if (hour === 0) cum = 0; // reset bij start nieuwe dag, zoals in het Excel-model
+    cum += (shortwave[i] || 0) * 0.36;
+    H[i] = cum;
+    I[i] = H[i] * ((0.45 * (500 / 120)) / 100) * transmissionFactor;
+  }
+  return { H, I };
+}
+
+// ── Render ─────────────────────────────────────────────
+function renderCharts(data, vars) {
+  const panel = document.getElementById('rightPanel');
+  const VAR_CONFIG = getVarConfig();
+
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+  panel.innerHTML = '';
+
+  const times = data.hourly.time;
+  const tf = parseFloat(document.getElementById('transmissionFactor').value) || 0;
+
+  const localeMap = { nl: 'nl-NL', en: 'en-US', zh: 'zh-CN' };
+  const locale = localeMap[currentLang] || 'en-US';
+
+  const tickLabels = times.map((tt, i) => {
+    const d = new Date(tt);
+    return i % 24 === 0
+      ? d.toLocaleDateString(locale, { weekday:'short', day:'numeric', month:'short' })
+      : '';
+  });
+
+  // ── Graph 1: Weather combo (temp + humidity + cloud cover) ──
+  const weatherVars = ['temperature_2m', 'relative_humidity_2m', 'cloud_cover'].filter(v => vars.includes(v));
+  if (weatherVars.length > 0) {
+    buildWeatherComboCard(panel, weatherVars, data, times, tickLabels, locale, VAR_CONFIG);
+  }
+
+  // ── Graph 2: Solar combo (W/m² + J/cm²/day + Mol/day) ──
+  if (vars.includes('shortwave_radiation')) {
+    const { H, I } = computeCumulativeColumns(data, tf);
+    buildSolarComboCard(panel, data, times, tickLabels, locale, tf, H, I);
+  }
+}
+
+// ── Weather combo chart: Temp (line, left y), Humidity (line, right y), Cloud (bar, right y2) ──
+function buildWeatherComboCard(panel, weatherVars, data, times, tickLabels, locale, VAR_CONFIG) {
+  const WEATHER_COLORS = {
+    temperature_2m:       { color: '#F2B705', lineColor: '#F2B705', type: 'line', yAxis: 'yTemp'  },
+    relative_humidity_2m: { color: '#7EC8E3', lineColor: '#7EC8E3', type: 'line', yAxis: 'yRight' },
+    cloud_cover:           { color: '#6B7280', lineColor: '#6B7280', type: 'bar',  yAxis: 'yRight' },
+  };
+
+  const card = document.createElement('div');
+  card.className = 'chart-card';
+
+  const legendHTML = weatherVars.map(v => {
+    const c = WEATHER_COLORS[v];
+    const cfg = VAR_CONFIG[v];
+    const shape = c.type === 'bar'
+      ? `<div class="legend-dot" style="background:${c.color};border-radius:2px;width:14px;height:10px;"></div>`
+      : `<div class="legend-line" style="background:${c.color}"></div>`;
+    return `<div class="legend-item">${shape}<span>${cfg.label} (${cfg.unit})</span></div>`;
+  }).join('');
+
+  card.innerHTML = `
+    <div class="chart-header">
+      <div class="chart-title"><span>${t('weatherChartTitle')}</span></div>
+    </div>
+    <div class="chart-legend">${legendHTML}</div>
+    <div class="chart-wrap" style="height:240px"><canvas id="chart-weather-combo"></canvas></div>
+  `;
+  panel.appendChild(card);
+
+  const ctx = document.getElementById('chart-weather-combo').getContext('2d');
+
+  const datasets = weatherVars.map(v => {
+    const c = WEATHER_COLORS[v];
+    const cfg = VAR_CONFIG[v];
+    const vals = data.hourly[v];
+    return {
+      label: `${cfg.label} (${cfg.unit})`,
+      data: vals,
+      type: c.type,
+      yAxisID: c.yAxis,
+      borderColor: c.color,
+      backgroundColor: c.type === 'bar' ? `${c.color}55` : `${c.color}15`,
+      fill: c.type === 'line',
+      tension: .3,
+      pointRadius: 0,
+      borderWidth: c.type === 'line' ? 2 : 0,
+      barPercentage: 1,
+      categoryPercentage: 1,
+      order: c.type === 'bar' ? 2 : 1,
+    };
+  });
+
+  const hasTemp = weatherVars.includes('temperature_2m');
+  const hasRight = weatherVars.some(v => v !== 'temperature_2m');
+
+  charts['weather-combo'] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: tickLabels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 400 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: items => {
+              const i = items[0].dataIndex;
+              return new Date(times[i]).toLocaleString(locale, { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+            },
+            label: item => {
+              const v = weatherVars[item.datasetIndex];
+              const cfg = VAR_CONFIG[v];
+              const val = typeof item.raw === 'number' ? item.raw.toFixed(1) : item.raw;
+              return `  ${cfg.label}: ${val} ${cfg.unit}`;
+            }
+          },
+          backgroundColor: '#1C1E23', borderColor: '#34363D', borderWidth: 1,
+          titleColor: '#8B8D95', bodyColor: '#F5F4F0', padding: 10,
+          bodyFont: { family: "'JetBrains Mono', monospace", size: 11 }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(52,54,61,.6)', drawTicks: false },
+          border: { display: false },
+          ticks: { color: '#8B8D95', font: { family: "'Inter'", size: 10 }, maxRotation: 0, autoSkip: false, callback: (v, i) => tickLabels[i] || null }
+        },
+        yTemp: {
+          type: 'linear', position: 'left', display: hasTemp,
+          grid: { color: 'rgba(52,54,61,.4)', drawTicks: false },
+          border: { display: false },
+          ticks: { color: '#F2B705', font: { family: "'JetBrains Mono'", size: 10 }, callback: v => `${v}°C` }
+        },
+        yRight: {
+          type: 'linear', position: 'right', display: hasRight,
+          min: 0, max: 100,
+          grid: { drawOnChartArea: false, drawTicks: false },
+          border: { display: false },
+          ticks: { color: '#7EC8E3', font: { family: "'JetBrains Mono'", size: 10 }, callback: v => `${v}%` }
+        }
+      }
+    }
+  });
+}
+
+// ── Solar combo chart: W/m² (bar) + J/cm²/day (line) + Mol/day (line) ──
+function buildSolarComboCard(panel, data, times, tickLabels, locale, tf, H, I) {
+  const card = document.createElement('div');
+  card.className = 'chart-card';
+
+  const legendHTML = `
+    <div class="legend-item"><div class="legend-dot" style="background:#F2B705;border-radius:2px;width:14px;height:10px;"></div><span>Shortwave GHI (W/m²)</span></div>
+    <div class="legend-item"><div class="legend-line" style="background:#4ECDC4"></div><span>${t('jcm2Label')} (J/cm²)</span></div>
+    <div class="legend-item"><div class="legend-line" style="background:#E87040"></div><span>${t('molLabel')} ${tf}) (mol)</span></div>
+  `;
+
+  card.innerHTML = `
+    <div class="chart-header">
+      <div class="chart-title"><span>${t('solarChartTitle')}</span></div>
+    </div>
+    <div class="chart-legend">${legendHTML}</div>
+    <div class="chart-wrap" style="height:240px"><canvas id="chart-solar-combo"></canvas></div>
+  `;
+  panel.appendChild(card);
+
+  const ctx = document.getElementById('chart-solar-combo').getContext('2d');
+  const swVals = data.hourly.shortwave_radiation;
+
+  charts['solar-combo'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: tickLabels,
+      datasets: [
+        {
+          label: 'Shortwave GHI (W/m²)',
+          data: swVals,
+          type: 'bar',
+          yAxisID: 'yWatt',
+          backgroundColor: 'rgba(242,183,5,0.5)',
+          borderWidth: 0,
+          barPercentage: 1, categoryPercentage: 1,
+          order: 3,
+        },
+        {
+          label: `${t('jcm2Label')} (J/cm²)`,
+          data: H,
+          type: 'line',
+          yAxisID: 'yJcm2',
+          borderColor: '#4ECDC4',
+          backgroundColor: 'rgba(78,205,196,0.08)',
+          fill: true,
+          tension: .3,
+          pointRadius: 0,
+          borderWidth: 2,
+          order: 1,
+        },
+        {
+          label: `${t('molLabel')} ${tf}) (mol)`,
+          data: I,
+          type: 'line',
+          yAxisID: 'yMol',
+          borderColor: '#E87040',
+          backgroundColor: 'rgba(232,112,64,0.08)',
+          fill: false,
+          tension: .3,
+          pointRadius: 0,
+          borderWidth: 2,
+          order: 2,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 400 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: items => {
+              const i = items[0].dataIndex;
+              return new Date(times[i]).toLocaleString(locale, { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+            },
+            label: item => {
+              const units = ['W/m²', 'J/cm²', 'mol'];
+              const val = typeof item.raw === 'number' ? item.raw.toFixed(2) : item.raw;
+              return `  ${item.dataset.label.split('(')[0].trim()}: ${val} ${units[item.datasetIndex] || ''}`;
+            }
+          },
+          backgroundColor: '#1C1E23', borderColor: '#34363D', borderWidth: 1,
+          titleColor: '#8B8D95', bodyColor: '#F5F4F0', padding: 10,
+          bodyFont: { family: "'JetBrains Mono', monospace", size: 11 }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(52,54,61,.6)', drawTicks: false },
+          border: { display: false },
+          ticks: { color: '#8B8D95', font: { family: "'Inter'", size: 10 }, maxRotation: 0, autoSkip: false, callback: (v, i) => tickLabels[i] || null }
+        },
+        yWatt: {
+          type: 'linear', position: 'left',
+          grid: { color: 'rgba(52,54,61,.4)', drawTicks: false },
+          border: { display: false },
+          ticks: { color: '#F2B705', font: { family: "'JetBrains Mono'", size: 10 }, callback: v => `${v} W` }
+        },
+        yJcm2: {
+          type: 'linear', position: 'right',
+          grid: { drawOnChartArea: false, drawTicks: false },
+          border: { display: false },
+          ticks: { color: '#4ECDC4', font: { family: "'JetBrains Mono'", size: 10 }, callback: v => `${v.toFixed(0)} J` }
+        },
+        yMol: {
+          type: 'linear', position: 'right',
+          grid: { drawOnChartArea: false, drawTicks: false },
+          border: { display: false },
+          display: false, // hidden — mol values proportional to J, shown in tooltip
+        }
+      }
+    }
+  });
+}
+
+// ── Excel export ───────────────────────────────────────
+function exportToExcel() {
+  if (!lastData) { showToast(t('noDataToExport')); return; }
+
+  const VAR_CONFIG = getVarConfig();
+  const tf = parseFloat(document.getElementById('transmissionFactor').value) || 0;
+  const times = lastData.hourly.time;
+  const hasSolar = lastVars.includes('shortwave_radiation');
+
+  let H = [], I = [];
+  if (hasSolar) {
+    const res = computeCumulativeColumns(lastData, tf);
+    H = res.H; I = res.I;
+  }
+
+  const metaRows = [
+    ['latitude', 'longitude', 'elevation', 'utc_offset_seconds', 'timezone', 'timezone_abbreviation', '', '', 'transmission factor'],
+    [lastData.latitude, lastData.longitude, lastData.elevation, lastData.utc_offset_seconds, lastData.timezone, lastData.timezone_abbreviation, '', '', tf]
+  ];
+
+  const header = ['time', ...lastVars.map(v => `${VAR_CONFIG[v].label} (${VAR_CONFIG[v].unit})`)];
+  if (hasSolar) header.push('J/cm2/day cumulative outside', 'Mol/day cumulative inside');
+
+  const dataRows = times.map((time, i) => {
+    const row = [time, ...lastVars.map(v => lastData.hourly[v][i])];
+    if (hasSolar) row.push(Number(H[i].toFixed(4)), Number(I[i].toFixed(6)));
+    return row;
+  });
+
+  const wsData = [...metaRows, [], header, ...dataRows];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = header.map(() => ({ wch: 16 }));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Forecast');
+
+  const fname = `weather_forecast_${lat}_${lon}_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, fname);
+  showToast(t('excelDownloaded'), true);
+}
+
+// ── Helpers ────────────────────────────────────────────
+function showLoader(v, text) {
+  if (text) document.getElementById('loaderText').textContent = text;
+  document.getElementById('loader').classList.toggle('visible', v);
+}
+
+function showToast(msg, success) {
+  const tEl = document.getElementById('toast');
+  tEl.textContent = msg;
+  tEl.classList.toggle('success', !!success);
+  tEl.classList.add('visible');
+  setTimeout(() => tEl.classList.remove('visible'), 3000);
+}
+
+// ── Init ───────────────────────────────────────────────
+setLang('en');
+// Collapse the settings panel by default on mobile so charts are visible first
+if (window.innerWidth <= 720) {
+  document.getElementById('leftPanel').classList.add('collapsed');
+}
+</script>
+</body>
+</html>
