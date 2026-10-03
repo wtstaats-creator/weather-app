@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Weather Dashboard</title>
+
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Weather Dashboard">
+<meta name="theme-color" content="#F6F8F7">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #F6F8F7;
+    --surface: #E9EFEC;
+    --ink:     #12211C;
+    --muted:   #55645E;
+    --line:    #D5DDD9;
+    --accent:  #0E7A5F;
+    --accent-text: #0E7A5F;
+    --sans: 'IBM Plex Sans', system-ui, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  }
+
+  html, body {
+    font-family: var(--sans);
+    font-size: 14px;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    width: 100%;
+    overflow-x: clip;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ── Kopregel ── */
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    padding: 10px 32px;
+  }
+  .brand { font-size: 15px; font-weight: 600; }
+  .header-right { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; }
+  .text-btn {
+    min-height: 44px;
+    padding: 0 4px;
+    background: none;
+    border: none;
+    color: var(--accent-text);
+    font-weight: 500;
+  }
+  .text-btn:hover:not(:disabled) { text-decoration: underline; }
+  .text-btn:disabled { color: var(--muted); opacity: .6; cursor: not-allowed; }
+  .lang-switch { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .lang-btn { min-height: 44px; padding: 0 12px; background: transparent; border: none; color: var(--muted); }
+  .lang-btn:hover { color: var(--ink); }
+  .lang-btn.active { background: var(--ink); color: #FFFFFF; font-weight: 600; }
+
+  /* ── Kaart bovenaan ── */
+  .map-wrap {
+    position: relative;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  #map { height: 340px; width: 100%; background: var(--surface); cursor: crosshair; z-index: 0; }
+  .leaflet-tile { filter: grayscale(1) contrast(.92) brightness(1.06); }
+  .leaflet-container { background: var(--surface); font-family: var(--sans); }
+  .leaflet-container .leaflet-control-attribution { font-size: 10px; color: var(--muted); }
+  .leaflet-container .leaflet-control-attribution a { color: var(--muted); }
+  .leaflet-bar a { color: var(--ink); }
+
+  .map-search {
+    position: absolute;
+    z-index: 2;
+    top: 16px; left: 32px;
+    width: min(420px, calc(100% - 64px));
+  }
+  .search-row { display: flex; gap: 8px; }
+  .search-input {
+    flex: 1; min-width: 0;
+    height: 44px;
+    padding: 0 12px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 16px; /* voorkomt iOS auto-zoom */
+    outline: none;
+  }
+  .search-input::placeholder { color: var(--muted); }
+  .search-input:focus { border-color: var(--ink); }
+  .icon-btn {
+    width: 44px; height: 44px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .icon-btn:hover { border-color: var(--ink); }
+  .icon-btn:disabled { opacity: .5; cursor: wait; }
+  .icon-btn svg { width: 18px; height: 18px; }
+  .search-results {
+    margin-top: 6px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .search-results:empty { display: none; }
+  .search-result-item {
+    display: block; width: 100%;
+    padding: 10px 12px;
+    text-align: left;
+    background: none; border: none;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px; color: var(--muted);
+    word-break: break-word;
+  }
+  .search-result-item:last-child { border-bottom: none; }
+  .search-result-item b { display: block; font-size: 14px; font-weight: 500; color: var(--ink); }
+  button.search-result-item:hover { background: var(--surface); }
+  div.search-result-item { cursor: default; }
+
+  /* ── Inhoud ── */
+  main {
+    max-width: 1216px;
+    margin: 0 auto;
+    padding: 28px 32px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+  [hidden] { display: none !important; }
+  .intro { color: var(--muted); font-size: 15px; max-width: 520px; line-height: 1.6; }
+  #dash { display: flex; flex-direction: column; gap: 28px; }
+
+  .title-row {
+    display: flex; flex-wrap: wrap;
+    align-items: flex-end; justify-content: space-between;
+    gap: 14px 24px;
+  }
+  .title-row h1 { font-size: 28px; font-weight: 600; line-height: 1.15; }
+  .loc-sub { margin-top: 4px; color: var(--muted); font-family: var(--mono); font-size: 12px; white-space: pre-wrap; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; }
+  .day-selector { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .day-btn { min-height: 44px; padding: 0 14px; background: transparent; border: none; white-space: nowrap; }
+  .day-btn:hover { background: var(--surface); }
+  .day-btn.active { background: var(--accent); color: #FFFFFF; font-weight: 600; }
+  .tf { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+  .tf-input {
+    width: 72px; height: 44px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 16px;
+    text-align: center;
+    outline: none;
+  }
+  .tf-input:focus { border-color: var(--ink); }
+
+  /* ── Dagcijfers ── */
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px 0; }
+  .kpi { border-left: 1px solid var(--line); padding: 2px 20px; min-width: 0; }
+  .kpi-label, .kpi-unit { font-size: 13px; color: var(--muted); }
+  .kpi-value { margin-top: 6px; font-family: var(--mono); font-size: 34px; font-weight: 500; line-height: 1.15; white-space: nowrap; }
+
+  /* ── Variabelen aan/uit ── */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .var-item {
+    min-height: 44px;
+    padding: 0 14px;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    color: var(--muted);
+  }
+  .var-item:hover { border-color: var(--muted); }
+  .var-item.active { border-color: var(--ink); color: var(--ink); font-weight: 500; }
+
+  /* ── Grafieken: één per variabele ── */
+  .charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 40px; }
+  .chart-card { min-width: 0; border-top: 1px solid var(--line); padding-top: 14px; }
+  .chart-header {
+    display: flex; flex-wrap: wrap;
+    align-items: baseline; justify-content: space-between;
+    gap: 4px 12px;
+    margin-bottom: 10px;
+  }
+  .chart-title { font-weight: 600; }
+  .chart-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 8px; }
+  .chart-title small { font-size: 14px; font-weight: 400; color: var(--muted); }
+  .chart-range { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .chart-wrap { position: relative; height: 210px; width: 100%; }
+  .no-vars { color: var(--muted); }
+
+  .credits { font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+  /* ── Laden en meldingen ── */
+  .loader {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(246,248,247,.7);
+    z-index: 9999;
+    align-items: center; justify-content: center;
+    flex-direction: column; gap: 14px;
+  }
+  .loader.visible { display: flex; }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--line);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loader-text { font-size: 13px; color: var(--muted); }
+
+  .toast {
+    display: none;
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    background: #B42318;
+    color: #FFFFFF;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-size: 13px;
+    z-index: 9999;
+    max-width: 90vw;
+    text-align: center;
+  }
+  .toast.visible { display: block; }
+  .toast.success { background: var(--ink); }
+
+  /* ── Smal scherm ── */
+  @media (max-width: 900px) {
+    .charts { grid-template-columns: minmax(0, 1fr); }
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 600px) {
+    header { padding: 8px 16px; }
+    #map { height: 260px; }
+    .map-search { top: 12px; left: 16px; width: calc(100% - 32px); }
+    main { padding: 20px 16px 32px; gap: 24px; }
+    #dash { gap: 24px; }
+    .title-row h1 { font-size: 23px; }
+    .day-selector { width: 100%; }
+    .day-btn { flex: 1; padding: 0 6px; }
+    .kpi { padding: 2px 12px; }
+    .kpi-value { font-size: 26px; }
+    .chart-wrap { height: 190px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Weather Dashboard</div>
+  <div class="header-right">
+    <button class="text-btn" id="exportBtn" disabled onclick="exportToExcel()" data-i18n="exportExcel">Download Excel</button>
+    <div class="lang-switch">
+      <button class="lang-btn" data-lang="nl" onclick="setLang('nl')">NL</button>
+      <button class="lang-btn active" data-lang="en" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" data-lang="zh" onclick="setLang('zh')">中文</button>
+    </div>
+  </div>
+</header>
+
+<div class="map-wrap">
+  <div id="map"></div>
+  <div class="map-search">
+    <div class="search-row">
+      <input type="text" class="search-input" id="addressInput" data-i18n-placeholder="addressPlaceholder" data-i18n-aria="addressPlaceholder" placeholder="Search address or place…" onkeydown="if(event.key==='Enter')searchAddress()">
+      <button class="icon-btn" onclick="searchAddress()" data-i18n-aria="search" aria-label="Search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.500-4.500"/></svg>
+      </button>
+      <button class="icon-btn" id="gpsBtn" onclick="useCurrentLocation()" data-i18n-aria="currentLocation" aria-label="Current location">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+      </button>
+    </div>
+    <div class="search-results" id="searchResults"></div>
+  </div>
+</div>
+
+<main>
+  <p class="intro" id="intro" data-i18n="intro">Click on the map, search for an address or use your current location. The forecast loads automatically.</p>
+
+  <div id="dash" hidden>
+    <div class="title-row">
+      <div>
+        <h1 id="locTitle"></h1>
+        <div class="loc-sub" id="locSub"></div>
+      </div>
+      <div class="controls">
+        <div class="day-selector" role="group" data-i18n-aria="forecastDays" aria-label="Forecast period">
+          <button class="day-btn" data-days="1" onclick="setDays(1)" data-i18n="today">Today</button>
+          <button class="day-btn" data-days="3" onclick="setDays(3)">3 <span data-i18n="days">days</span></button>
+          <button class="day-btn" data-days="7" onclick="setDays(7)">7 <span data-i18n="days">days</span></button>
+          <button class="day-btn active" data-days="14" onclick="setDays(14)">14 <span data-i18n="days">days</span></button>
+        </div>
+        <label class="tf">
+          <span data-i18n="transmissionFactor">Cover transmission</span>
+          <input type="number" class="tf-input" id="transmissionFactor" value="0.6" step="0.01" min="0" max="1" inputmode="decimal">
+        </label>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-label" data-i18n="kpiSum">Radiation sum today</div><div class="kpi-value" id="kpiSum">–</div><div class="kpi-unit" data-i18n="kpiSumUnit">J/cm² outside</div></div>
+      <div class="kpi"><div class="kpi-label" data-i18n="kpiDli">DLI inside today</div><div class="kpi-value" id="kpiDli">–</div><div class="kpi-unit" id="kpiDliUnit">mol/m²</div></div>
+      <div class="kpi"><div class="kpi-label" data-i18n="kpiTemp">Temperature today</div><div class="kpi-value" id="kpiTemp">–</div><div class="kpi-unit" data-i18n="kpiTempUnit">°C outside</div></div>
+      <div class="kpi"><div class="kpi-label" data-i18n="kpiVpd">Highest VPD today</div><div class="kpi-value" id="kpiVpd">–</div><div class="kpi-unit" id="kpiVpdUnit">kPa</div></div>
+    </div>
+
+    <div class="chips" role="group" data-i18n-aria="variables" aria-label="Variables">
+      <button class="var-item active" data-var="temperature_2m" data-i18n="chipTemp">Temperature</button>
+      <button class="var-item" data-var="relative_humidity_2m" data-i18n="chipHum">Humidity</button>
+      <button class="var-item" data-var="cloud_cover" data-i18n="chipCloud">Cloud cover</button>
+      <button class="var-item active" data-var="shortwave_radiation" data-i18n="chipSw">Radiation</button>
+      <button class="var-item active" data-var="jcm2_day" data-i18n="chipJcm2">Radiation sum</button>
+      <button class="var-item active" data-var="mol_day" data-i18n="chipMol">DLI inside</button>
+      <button class="var-item active" data-var="light_intensity_inside" data-i18n="chipLight">Light inside</button>
+      <button class="var-item" data-var="vpd_outside" data-i18n="chipVpd">VPD</button>
+      <button class="var-item" data-var="vd_outside" data-i18n="chipVd">Humidity deficit</button>
+    </div>
+
+    <div class="charts" id="charts"></div>
+  </div>
+
+  <div class="credits" data-i18n="credits">Weather data: Open-Meteo.com (CC BY 4.0) · Map &amp; search: © OpenStreetMap contributors</div>
+</main>
+
+<div class="loader" id="loader">
+  <div class="spinner"></div>
+  <div class="loader-text" id="loaderText" data-i18n="fetchingData">Fetching weather data…</div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+// ════════════════════════════════════════════════════════
+// Vertalingen
+// ════════════════════════════════════════════════════════
+const TRANSLATIONS = {
+  nl: {
+    titleBase: 'Weather Dashboard',
+    intro: 'Klik op de kaart, zoek een adres of gebruik je huidige locatie. De voorspelling wordt daarna direct geladen.',
+    currentLocation: 'Huidige locatie',
+    addressPlaceholder: 'Zoek adres of plaats…',
+    search: 'Zoek',
+    searching: 'Zoeken…',
+    noResults: 'Geen resultaten gevonden.',
+    searchFailed: 'Zoeken mislukt, probeer opnieuw.',
+    variables: 'Variabelen',
+    forecastDays: 'Voorspelperiode',
+    today: 'Vandaag',
+    days: 'dagen',
+    transmissionFactor: 'Transmissie kasdek',
+    exportExcel: 'Excel downloaden',
+    kpiSum: 'Stralingssom vandaag', kpiSumUnit: 'J/cm² buiten',
+    kpiDli: 'DLI binnen vandaag', kpiDliUnit: 'mol/m² · transmissie',
+    kpiTemp: 'Temperatuur vandaag', kpiTempUnit: '°C buiten',
+    kpiVpd: 'Hoogste VPD vandaag', kpiVpdUnit: 'kPa buiten', kpiAt: 'om',
+    chipTemp: 'Temperatuur', chipHum: 'Luchtvochtigheid', chipCloud: 'Bewolking', chipSw: 'Straling',
+    chipJcm2: 'Stralingssom', chipMol: 'DLI binnen', chipLight: 'Licht binnen', chipVpd: 'VPD', chipVd: 'Vochtdeficit',
+    varTemp: 'Temperatuur', varHum: 'Relatieve luchtvochtigheid', varCloud: 'Bewolking', varSw: 'Straling (GHI)',
+    jcm2Label: 'Stralingssom buiten, per dag', molLabel: 'DLI binnen de kas, per dag',
+    varLight: 'Lichtintensiteit binnen', varVpd: 'VPD buitenlucht', varVd: 'Vochtdeficit buitenlucht',
+    fetchingData: 'Weerdata ophalen…',
+    selectAtLeastOne: 'Selecteer minimaal één variabele.',
+    fetchFailed: 'Ophalen mislukt: ',
+    locationFailed: 'Kon locatie niet ophalen.',
+    locationDenied: 'Locatietoegang geweigerd. Sta dit toe in je browserinstellingen.',
+    geoNotSupported: 'Geolocatie wordt niet ondersteund door je browser.',
+    noDataToExport: 'Geen data om te exporteren.',
+    excelDownloaded: 'Excel-bestand gedownload.',
+    credits: 'Weerdata: Open-Meteo.com (CC BY 4.0) · Kaart & zoeken: © OpenStreetMap-bijdragers',
+  },
+  en: {
+    titleBase: 'Weather Dashboard',
+    intro: 'Click on the map, search for an address or use your current location. The forecast loads automatically.',
+    currentLocation: 'Current location',
+    addressPlaceholder: 'Search address or place…',
+    search: 'Search',
+    searching: 'Searching…',
+    noResults: 'No results found.',
+    searchFailed: 'Search failed, please try again.',
+    variables: 'Variables',
+    forecastDays: 'Forecast period',
+    today: 'Today',
+    days: 'days',
+    transmissionFactor: 'Cover transmission',
+    exportExcel: 'Download Excel',
+    kpiSum: 'Radiation sum today', kpiSumUnit: 'J/cm² outside',
+    kpiDli: 'DLI inside today', kpiDliUnit: 'mol/m² · transmission',
+    kpiTemp: 'Temperature today', kpiTempUnit: '°C outside',
+    kpiVpd: 'Highest VPD today', kpiVpdUnit: 'kPa outside', kpiAt: 'at',
+    chipTemp: 'Temperature', chipHum: 'Humidity', chipCloud: 'Cloud cover', chipSw: 'Radiation',
+    chipJcm2: 'Radiation sum', chipMol: 'DLI inside', chipLight: 'Light inside', chipVpd: 'VPD', chipVd: 'Humidity deficit',
+    varTemp: 'Temperature', varHum: 'Relative humidity', varCloud: 'Cloud cover', varSw: 'Radiation (GHI)',
+    jcm2Label: 'Radiation sum outside, per day', molLabel: 'DLI inside the greenhouse, per day',
+    varLight: 'Light intensity inside', varVpd: 'VPD outside air', varVd: 'Humidity deficit outside air',
+    fetchingData: 'Fetching weather data…',
+    selectAtLeastOne: 'Select at least one variable.',
+    fetchFailed: 'Fetch failed: ',
+    locationFailed: 'Could not get location.',
+    locationDenied: 'Location access denied. Allow it in your browser settings.',
+    geoNotSupported: 'Geolocation is not supported by your browser.',
+    noDataToExport: 'No data to export.',
+    excelDownloaded: 'Excel file downloaded.',
+    credits: 'Weather data: Open-Meteo.com (CC BY 4.0) · Map & search: © OpenStreetMap contributors',
+  },
+  zh: {
+    titleBase: '天气仪表盘',
+    intro: '点击地图、搜索地址或使用当前位置，预报将自动加载。',
+    currentLocation: '当前位置',
+    addressPlaceholder: '搜索地址或地名…',
+    search: '搜索',
+    searching: '搜索中…',
+    noResults: '未找到结果。',
+    searchFailed: '搜索失败，请重试。',
+    variables: '变量',
+    forecastDays: '预测周期',
+    today: '今天',
+    days: '天',
+    transmissionFactor: '温室覆盖透射率',
+    exportExcel: '下载 Excel',
+    kpiSum: '今日辐射总量', kpiSumUnit: 'J/cm² 室外',
+    kpiDli: '今日室内 DLI', kpiDliUnit: 'mol/m² · 透射率',
+    kpiTemp: '今日温度', kpiTempUnit: '°C 室外',
+    kpiVpd: '今日最高 VPD', kpiVpdUnit: 'kPa 室外', kpiAt: '时间',
+    chipTemp: '温度', chipHum: '湿度', chipCloud: '云量', chipSw: '辐射',
+    chipJcm2: '辐射总量', chipMol: '室内 DLI', chipLight: '室内光照', chipVpd: 'VPD', chipVd: '湿度亏缺',
+    varTemp: '温度', varHum: '相对湿度', varCloud: '云量', varSw: '辐射 (GHI)',
+    jcm2Label: '室外辐射总量（每日累计）', molLabel: '温室内 DLI（每日累计）',
+    varLight: '室内光照强度', varVpd: '室外空气 VPD', varVd: '室外空气湿度亏缺',
+    fetchingData: '正在获取天气数据…',
+    selectAtLeastOne: '请至少选择一个变量。',
+    fetchFailed: '获取失败：',
+    locationFailed: '无法获取位置。',
+    locationDenied: '位置访问被拒绝。请在浏览器设置中允许访问。',
+    geoNotSupported: '您的浏览器不支持地理定位。',
+    noDataToExport: '没有可导出的数据。',
+    excelDownloaded: 'Excel 文件已下载。',
+    credits: '天气数据：Open-Meteo.com (CC BY 4.0) · 地图与搜索：© OpenStreetMap 贡献者',
+  }
+};
+
+// ════════════════════════════════════════════════════════
+// State
+// ════════════════════════════════════════════════════════
+let currentLang = 'en';
+let lat = null, lon = null, locName = null;
+let marker = null;
+let charts = {};
+let lastData = null;
+let forecastDays = 14;
+let toastTimer = null;
+let fetchSeq = 0;
+
+const LOCALES = { nl: 'nl-NL', en: 'en-US', zh: 'zh-CN' };
+const INK = '#12211C', MUTED = '#55645E', LINE = '#D5DDD9';
+
+// Altijd alle basisvariabelen ophalen: aan/uit zetten kost dan geen nieuwe API-aanroep.
+const API_VARS = ['temperature_2m', 'relative_humidity_2m', 'cloud_cover', 'shortwave_radiation'];
+
+// Eén definitie per variabele: eigen grafiek met eigen y-as.
+//  color = eigen kleur van de grafiek; dec = decimalen; min/max = vaste asgrenzen; zero = as begint op 0; sharp = lijn niet afronden
+const VAR_DEFS = [
+  { key: 'temperature_2m', color: '#D9480F',       labelKey: 'varTemp',   unit: '°C',        type: 'line', dec: 1 },
+  { key: 'relative_humidity_2m', color: '#1C7ED6', labelKey: 'varHum',    unit: '%',         type: 'line', dec: 0, min: 0, max: 100 },
+  { key: 'cloud_cover', color: '#6B7780',          labelKey: 'varCloud',  unit: '%',         type: 'bar',  dec: 0, min: 0, max: 100 },
+  { key: 'shortwave_radiation', color: '#E0A100',  labelKey: 'varSw',     unit: 'W/m²',      type: 'bar',  dec: 0, zero: true,
+    exportLabel: () => 'Shortwave Solar Radiation GHI (W/m²)' },
+  { key: 'jcm2_day', color: '#0E7A5F',             labelKey: 'jcm2Label', unit: 'J/cm²',     type: 'line', dec: 0, zero: true, sharp: true,
+    exportLabel: () => 'J/cm2/day cumulative outside', exportDec: 4 },
+  { key: 'mol_day', color: '#7A4E12',              labelKey: 'molLabel',  unit: 'mol/m²',    type: 'line', dec: 2, zero: true, sharp: true,
+    exportLabel: () => 'Mol/day cumulative inside', exportDec: 6 },
+  { key: 'light_intensity_inside', color: '#6741D9', labelKey: 'varLight', unit: 'µmol/m²/s', type: 'line', dec: 0, zero: true,
+    exportLabel: () => `${t('varLight')} (µmol/m²/s)`, exportDec: 3 },
+  { key: 'vpd_outside', color: '#C2255C',          labelKey: 'varVpd',    unit: 'kPa',       type: 'line', dec: 2, zero: true,
+    exportLabel: () => 'VPD outside air (kPa)', exportDec: 3 },
+  { key: 'vd_outside', color: '#0C8599',           labelKey: 'varVd',     unit: 'g/m³',      type: 'line', dec: 1, zero: true,
+    exportLabel: () => 'Humidity deficit outside air (g/m3)', exportDec: 2 },
+];
+
+function t(key) { return TRANSLATIONS[currentLang][key] || TRANSLATIONS.en[key] || key; }
+function getLocale() { return LOCALES[currentLang] || 'en-US'; }
+function fmt(v, dec) {
+  return Number(v).toLocaleString(getLocale(), { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+function coordText() {
+  return `${Math.abs(lat)}° ${lat >= 0 ? 'N' : 'S'}  ${Math.abs(lon)}° ${lon >= 0 ? 'E' : 'W'}`;
+}
+function getTf() {
+  const v = parseFloat(document.getElementById('transmissionFactor').value);
+  if (!isFinite(v)) return 0;
+  return Math.min(1, Math.max(0, v));
+}
+// "2026-10-03T09:00" -> "03-10"
+function dateLabel(tt) { return `${tt.slice(8, 10)}-${tt.slice(5, 7)}`; }
+
+function setLang(lang) {
+  currentLang = lang;
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : lang;
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+  document.title = t('titleBase');
+  render();
+}
+
+function setDays(n) {
+  forecastDays = n;
+  document.querySelectorAll('.day-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.days, 10) === n));
+  if (lat !== null) fetchData();
+}
+
+// ── Kaart ──────────────────────────────────────────────
+const map = L.map('map', { zoomControl: false, attributionControl: true, worldCopyJump: true, minZoom: 1 })
+  .setView([25, 10], 2);
+map.attributionControl.setPrefix(false);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 18,
+  attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
+}).addTo(map);
+
+const markerIcon = L.divIcon({
+  html: '<div style="width:16px;height:16px;background:#0E7A5F;border:3px solid #F6F8F7;border-radius:50%;box-shadow:0 0 0 1px #12211C;"></div>',
+  className: '',
+  iconSize: [16, 16],
+  iconAnchor: [8, 8]
+});
+
+function setLocation(newLat, newLon, zoom, name) {
+  lat = +Number(newLat).toFixed(4);
+  lon = +Number(newLon).toFixed(4);
+  locName = name || null;
+
+  if (marker) marker.remove();
+  marker = L.marker([lat, lon], { icon: markerIcon }).addTo(map);
+  map.setView([lat, lon], zoom || Math.max(map.getZoom(), 5));
+
+  if (!name) lookupName(lat, lon);
+  fetchData();
+}
+
+// Plaatsnaam bij een klik op de kaart of GPS-locatie (lukt dit niet, dan blijven de coördinaten staan)
+async function lookupName(qLat, qLon) {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${qLat}&lon=${qLon}&zoom=10&accept-language=${currentLang}`);
+    if (!res.ok) return;
+    const r = await res.json();
+    const a = (r && r.address) || {};
+    const name = a.city || a.town || a.village || a.municipality || a.county || a.state;
+    if (name && lat === qLat && lon === qLon && !locName) {
+      locName = a.country && a.country !== name ? `${name}, ${a.country}` : name;
+      renderTitle();
+    }
+  } catch (e) { /* geen naam: coördinaten volstaan */ }
+}
+
+map.on('click', e => {
+  const p = e.latlng.wrap();
+  setLocation(p.lat, p.lng);
+});
+window.addEventListener('resize', () => setTimeout(() => map.invalidateSize(), 150));
+
+// ── Huidige locatie ────────────────────────────────────
+function useCurrentLocation() {
+  if (!navigator.geolocation) { showToast(t('geoNotSupported')); return; }
+  const btn = document.getElementById('gpsBtn');
+  btn.disabled = true;
+  navigator.geolocation.getCurrentPosition(
+    pos => { btn.disabled = false; setLocation(pos.coords.latitude, pos.coords.longitude, 10); },
+    err => { btn.disabled = false; showToast(err.code === 1 ? t('locationDenied') : t('locationFailed')); },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
+// ── Adres zoeken (OpenStreetMap Nominatim) ─────────────
+function searchInfo(text) {
+  const el = document.createElement('div');
+  el.className = 'search-result-item';
+  el.textContent = text;
+  return el;
+}
+
+async function searchAddress() {
+  const q = document.getElementById('addressInput').value.trim();
+  const resultsEl = document.getElementById('searchResults');
+  resultsEl.replaceChildren();
+  if (!q) return;
+  resultsEl.replaceChildren(searchInfo(t('searching')));
+
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5&addressdetails=1&accept-language=${currentLang}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const results = await res.json();
+    if (!results.length) { resultsEl.replaceChildren(searchInfo(t('noResults'))); return; }
+
+    resultsEl.replaceChildren();
+    results.forEach(r => {
+      const shortName = r.display_name.split(',')[0];
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'search-result-item';
+      // textContent: tekst van een externe API nooit als HTML invoegen
+      const b = document.createElement('b');
+      b.textContent = shortName;
+      item.append(b, document.createTextNode(r.display_name));
+      item.onclick = () => {
+        resultsEl.replaceChildren();
+        document.getElementById('addressInput').value = shortName;
+        setLocation(parseFloat(r.lat), parseFloat(r.lon), 10, shortName);
+      };
+      resultsEl.appendChild(item);
+    });
+  } catch (e) {
+    resultsEl.replaceChildren(searchInfo(t('searchFailed')));
+  }
+}
+
+// ── Variabelen aan/uit: direct effect ──────────────────
+document.querySelectorAll('.var-item').forEach(el => {
+  el.type = 'button';
+  el.setAttribute('aria-pressed', el.classList.contains('active'));
+  el.addEventListener('click', () => {
+    el.classList.toggle('active');
+    el.setAttribute('aria-pressed', el.classList.contains('active'));
+    renderCharts();
+  });
+});
+document.getElementById('transmissionFactor').addEventListener('input', render);
+
+function getSelectedVars() {
+  return [...document.querySelectorAll('.var-item.active')].map(el => el.dataset.var);
+}
+
+// ── Ophalen ────────────────────────────────────────────
+async function fetchData() {
+  if (lat === null) return;
+  const seq = ++fetchSeq;
+  showLoader(true, t('fetchingData'));
+
+  const url = `https://api.open-meteo.com/v1/forecast`
+    + `?latitude=${lat}&longitude=${lon}`
+    + `&hourly=${API_VARS.join(',')}`
+    + `&models=best_match&timezone=auto&forecast_days=${forecastDays}`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error((body && body.reason) || `API error ${res.status}`);
+    }
+    const data = await res.json();
+    if (!data.hourly || !Array.isArray(data.hourly.time)) throw new Error('unexpected API response');
+    if (seq !== fetchSeq) return; // er is intussen een nieuwere locatie of periode gekozen
+    lastData = data;
+    document.getElementById('exportBtn').disabled = false;
+    render();
+  } catch (e) {
+    if (seq === fetchSeq) showToast(t('fetchFailed') + e.message);
+  } finally {
+    if (seq === fetchSeq) showLoader(false);
+  }
+}
+
+// ── Berekeningen (overgenomen uit Forecast_model.xlsx) ─
+// H: J/cm2/day cumulative outside  =  cumsom(shortwave_radiation * 0.36), reset elke dag om 00:00
+// I: Mol/day cumulative inside     =  H * ((0.45*(500/120))/100) * transmissiefactor
+function computeCumulativeColumns(data, transmissionFactor) {
+  const times = data.hourly.time;
+  const shortwave = data.hourly.shortwave_radiation || [];
+  const H = new Array(times.length).fill(0);
+  const I = new Array(times.length).fill(0);
+
+  let cum = 0;
+  for (let i = 0; i < times.length; i++) {
+    // Uur uit de lokale tijdstring van de locatie, niet uit de tijdzone van de browser
+    const hour = parseInt(times[i].slice(11, 13), 10);
+    if (hour === 0) cum = 0;
+    cum += (shortwave[i] || 0) * 0.36;
+    H[i] = cum;
+    I[i] = H[i] * ((0.45 * (500 / 120)) / 100) * transmissionFactor;
+  }
+  return { H, I };
+}
+
+function computeSeries(data, tf) {
+  const h = data.hourly;
+  const n = h.time.length;
+  const T  = h.temperature_2m || [];
+  const RH = h.relative_humidity_2m || [];
+  const sw = h.shortwave_radiation || new Array(n).fill(null);
+  const { H, I } = computeCumulativeColumns(data, tf);
+
+  const light = sw.map(v => Number(((v || 0) * 0.45 * (500 / 120) * tf).toFixed(3)));
+
+  // VPD en vochtdeficit van de BUITENLUCHT (Tetens)
+  //   es  = 0.6108 * exp(17.27*T / (T+237.3))        kPa
+  //   VPD = es * (1 - RV/100)                         kPa
+  //   VD  = 2167 * es / (T+273.15) * (1 - RV/100)     g/m³
+  const vpd = new Array(n).fill(null);
+  const vd  = new Array(n).fill(null);
+  for (let i = 0; i < n; i++) {
+    if (typeof T[i] !== 'number' || typeof RH[i] !== 'number') continue;
+    const es = 0.6108 * Math.exp((17.27 * T[i]) / (T[i] + 237.3));
+    const dry = 1 - RH[i] / 100;
+    vpd[i] = es * dry;
+    vd[i]  = (2167 * es / (T[i] + 273.15)) * dry;
+  }
+
+  return {
+    temperature_2m: T, relative_humidity_2m: RH, cloud_cover: h.cloud_cover || [], shortwave_radiation: sw,
+    jcm2_day: H, mol_day: I, light_intensity_inside: light, vpd_outside: vpd, vd_outside: vd,
+  };
+}
+
+// ── Weergave ───────────────────────────────────────────
+function render() {
+  const has = !!lastData;
+  document.getElementById('dash').hidden = !has;
+  document.getElementById('intro').hidden = has;
+  if (!has) return;
+  renderTitle();
+  renderKpis();
+  renderCharts();
+}
+
+function renderTitle() {
+  if (lat === null) return;
+  document.getElementById('locTitle').textContent = locName || coordText();
+  const parts = [];
+  if (locName) parts.push(coordText());
+  if (lastData && lastData.timezone) parts.push(lastData.timezone);
+  document.getElementById('locSub').textContent = parts.join('  ·  ');
+}
+
+// Dagcijfers van de eerste dag in de voorspelling (vandaag op de locatie)
+function renderKpis() {
+  const tf = getTf();
+  const s = computeSeries(lastData, tf);
+  const times = lastData.hourly.time;
+  const day0 = times[0].slice(0, 10);
+  const idx = [];
+  times.forEach((tt, i) => { if (tt.slice(0, 10) === day0) idx.push(i); });
+
+  const nums = key => idx.map(i => s[key][i]).filter(v => typeof v === 'number' && isFinite(v));
+  const set = (id, txt) => { document.getElementById(id).textContent = txt; };
+
+  const sum = nums('jcm2_day'), dli = nums('mol_day'), temp = nums('temperature_2m');
+  set('kpiSum', sum.length ? fmt(Math.max(...sum), 0) : '–');
+  set('kpiDli', dli.length ? fmt(Math.max(...dli), 1) : '–');
+  set('kpiDliUnit', `${t('kpiDliUnit')} ${fmt(tf, 2)}`);
+  set('kpiTemp', temp.length ? `${fmt(Math.min(...temp), 0)} – ${fmt(Math.max(...temp), 0)}` : '–');
+
+  let best = -1;
+  idx.forEach(i => { const v = s.vpd_outside[i]; if (typeof v === 'number' && (best < 0 || v > s.vpd_outside[best])) best = i; });
+  set('kpiVpd', best >= 0 ? fmt(s.vpd_outside[best], 2) : '–');
+  set('kpiVpdUnit', best >= 0 ? `${t('kpiVpdUnit')} · ${t('kpiAt')} ${times[best].slice(11, 16)}` : t('kpiVpdUnit'));
+}
+
+function renderCharts() {
+  const panel = document.getElementById('charts');
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+  panel.replaceChildren();
+  if (!lastData) return;
+
+  const selected = getSelectedVars();
+  const defs = VAR_DEFS.filter(d => selected.includes(d.key));
+  if (!defs.length) {
+    const p = document.createElement('p');
+    p.className = 'no-vars';
+    p.textContent = t('selectAtLeastOne');
+    panel.appendChild(p);
+    return;
+  }
+
+  const tf = getTf();
+  const series = computeSeries(lastData, tf);
+  const times = lastData.hourly.time;
+
+  // Dagnummer per uur (voor het uitdunnen van de x-as-labels)
+  const dayIndex = new Array(times.length);
+  let d = -1, prev = '';
+  times.forEach((tt, i) => { const day = tt.slice(0, 10); if (day !== prev) { d++; prev = day; } dayIndex[i] = d; });
+  const shared = { times, dayIndex, nDays: d + 1, locale: getLocale() };
+
+  defs.forEach(def => buildVarCard(panel, def, series[def.key] || [], shared));
+}
+
+function buildVarCard(panel, def, vals, shared) {
+  const { times, dayIndex, nDays, locale } = shared;
+  const name = t(def.labelKey);
+
+  const nums = vals.filter(v => typeof v === 'number' && isFinite(v));
+  let mn = Infinity, mx = -Infinity;
+  nums.forEach(v => { if (v < mn) mn = v; if (v > mx) mx = v; });
+
+  const card = document.createElement('div');
+  card.className = 'chart-card';
+  const header = document.createElement('div');
+  header.className = 'chart-header';
+  const title = document.createElement('div');
+  title.className = 'chart-title';
+  const unitEl = document.createElement('small');
+  unitEl.textContent = def.unit;
+  const swatch = document.createElement('span');
+  swatch.className = 'chart-swatch';
+  swatch.style.background = def.color;
+  title.append(swatch, `${name} `, unitEl);
+  const range = document.createElement('div');
+  range.className = 'chart-range';
+  if (nums.length) range.textContent = `min ${fmt(mn, def.dec)} · max ${fmt(mx, def.dec)}`;
+  header.append(title, range);
+  const wrap = document.createElement('div');
+  wrap.className = 'chart-wrap';
+  const canvas = document.createElement('canvas');
+  wrap.appendChild(canvas);
+  card.append(header, wrap);
+  panel.appendChild(card);
+
+  // ── Y-as: altijd links, vaste breedte, ronde stappen ──
+  const narrow = window.innerWidth <= 600;
+  const AXIS_W = 52; // gelijke breedte: alle grafieken lijnen onder elkaar uit
+  const hasFixedRange = def.min !== undefined && def.max !== undefined;
+
+  const yScale = {
+    type: 'linear',
+    position: 'left',
+    beginAtZero: !!def.zero,
+    grace: hasFixedRange ? 0 : '8%',
+    grid: { color: LINE, drawTicks: false },
+    border: { display: false },
+    ticks: {
+      color: INK,
+      font: { family: "'IBM Plex Mono', monospace", size: 11 },
+      padding: 8,
+      maxTicksLimit: narrow ? 5 : 6,
+      callback: v => Number(v).toLocaleString(locale, { maximumFractionDigits: 2 })
+    },
+    afterFit: scale => { scale.width = AXIS_W; }
+  };
+  if (def.min !== undefined) yScale.min = def.min;
+  if (def.max !== undefined) yScale.max = def.max;
+  if (hasFixedRange) {
+    yScale.ticks.stepSize = narrow ? 25 : 20;
+  } else if (!def.zero && nums.length) {
+    // Schaal zonder nulpunt (temperatuur): strak om de data, op ronde stappen
+    const span = Math.max(mx - mn, 1);
+    const step = [1, 2, 5, 10, 20, 50, 100].find(st => span / st <= (narrow ? 4 : 5)) || 100;
+    yScale.min = Math.floor(mn / step) * step;
+    yScale.max = Math.ceil(mx / step) * step;
+    if (yScale.max === yScale.min) yScale.max += step;
+    yScale.ticks.stepSize = step;
+    yScale.grace = 0;
+  }
+
+  const isBar = def.type === 'bar';
+
+  charts[def.key] = new Chart(canvas.getContext('2d'), {
+    type: def.type,
+    data: {
+      labels: times,
+      datasets: [{
+        label: name,
+        data: vals,
+        borderColor: def.color,
+        backgroundColor: isBar ? def.color + 'B3' : def.color + '1F',
+        fill: !isBar,
+        tension: def.sharp ? 0 : .3,
+        pointRadius: 0,
+        pointHoverRadius: 3,
+        borderWidth: isBar ? 0 : 2,
+        barPercentage: 1,
+        categoryPercentage: 1,
+        spanGaps: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          displayColors: false,
+          callbacks: {
+            // uur met de datum erachter, bv. "09:00 · 03-10"
+            title: items => { const tt = times[items[0].dataIndex]; return `${tt.slice(11, 16)} · ${dateLabel(tt)}`; },
+            label: item => (typeof item.raw === 'number') ? `${fmt(item.raw, def.dec)} ${def.unit}` : '–'
+          },
+          backgroundColor: INK, titleColor: '#D6D6D2', bodyColor: '#FFFFFF', padding: 10,
+          titleFont: { family: "'IBM Plex Mono', monospace", size: 11, weight: '400' },
+          bodyFont: { family: "'IBM Plex Mono', monospace", size: 13 }
+        }
+      },
+      scales: {
+        x: {
+          grid: {
+            drawTicks: false,
+            // verticale lijn alleen op de dagwissel
+            color: ctx => (ctx.tick && times[ctx.tick.value] && times[ctx.tick.value].slice(11, 13) === '00') ? LINE : 'rgba(0,0,0,0)'
+          },
+          border: { color: LINE },
+          ticks: {
+            color: MUTED,
+            font: { family: "'IBM Plex Mono', monospace", size: 11 },
+            maxRotation: 0,
+            autoSkip: false,
+            padding: 6,
+            // X-as: uren, met op 00:00 de datum eronder (bv. "00:00" / "03-10").
+            // Het aantal uur-labels per dag volgt uit de beschikbare breedte.
+            callback: function (value) {
+              const tt = times[value];
+              if (!tt) return '';
+              const hour = parseInt(tt.slice(11, 13), 10);
+              const pxDay = (this.chart.width - AXIS_W) / nDays;
+              const step = [1, 2, 3, 4, 6, 12, 24].find(s => pxDay / (24 / s) >= 46) || 24;
+              if (hour % step !== 0) return '';
+              if (step === 24) {
+                const every = Math.max(1, Math.ceil(46 / pxDay));
+                if (dayIndex[value] % every !== 0) return '';
+              }
+              const hh = tt.slice(11, 16);
+              return hour === 0 ? [hh, dateLabel(tt)] : hh;
+            }
+          }
+        },
+        y: yScale
+      }
+    }
+  });
+}
+
+// ── Excel-export ───────────────────────────────────────
+function exportToExcel() {
+  if (!lastData) { showToast(t('noDataToExport')); return; }
+
+  const selected = getSelectedVars();
+  const defs = VAR_DEFS.filter(d => selected.includes(d.key));
+  if (!defs.length) { showToast(t('selectAtLeastOne')); return; }
+
+  const tf = getTf();
+  const times = lastData.hourly.time;
+  const series = computeSeries(lastData, tf);
+
+  const metaRows = [
+    ['latitude',   lastData.latitude],
+    ['longitude',  lastData.longitude],
+    ['elevation',  lastData.elevation],
+    ['timezone',   lastData.timezone],
+    ['utc_offset', lastData.utc_offset_seconds],
+    ['transmission factor', tf],
+    [],
+  ];
+
+  // Getransponeerd: rij "time" met de tijdstappen, daaronder één rij per variabele
+  const timeRow = ['time', ...times];
+  const dataSeriesRows = defs.map(def => {
+    const label = def.exportLabel ? def.exportLabel() : `${t(def.labelKey)} (${def.unit})`;
+    const vals = (series[def.key] || []).map(v => {
+      if (typeof v !== 'number' || !isFinite(v)) return null;
+      return def.exportDec !== undefined ? Number(v.toFixed(def.exportDec)) : v;
+    });
+    return [label, ...vals];
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet([...metaRows, timeRow, ...dataSeriesRows]);
+  ws['!cols'] = [{ wch: 36 }, ...times.map(() => ({ wch: 18 }))];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Forecast');
+  XLSX.writeFile(wb, `weather_forecast_${lat}_${lon}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  showToast(t('excelDownloaded'), true);
+}
+
+// ── Hulpfuncties ───────────────────────────────────────
+function showLoader(v, text) {
+  if (text) document.getElementById('loaderText').textContent = text;
+  document.getElementById('loader').classList.toggle('visible', v);
+}
+
+function showToast(msg, success) {
+  const tEl = document.getElementById('toast');
+  tEl.textContent = msg;
+  tEl.classList.toggle('success', !!success);
+  tEl.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => tEl.classList.remove('visible'), 3000);
+}
+
+// De labels op de x-as hangen af van de breedte: opnieuw tekenen na een formaatwijziging
+let resizeTimer = null;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(renderCharts, 200); });
+
+setLang('en');
+</script>
+</body>
+</html>
